@@ -1,44 +1,46 @@
 import streamlit as st
 import time
 import os
-import av
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from deepface import DeepFace
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 from collections import defaultdict
+import av
+import threading
 
+# RTC configuration without STUN servers (reduce connection drops)
+RTC_CONF = RTCConfiguration({"iceServers": []})
+
+# Streamlit UI
 st.set_page_config(page_title="Real-time Emotion Tracker", layout="wide")
 st.title("Real-time Emotion Detection (Classroom Demo)")
 
-# Parameters
+# User controls
 RECORD_SECONDS = st.slider("Recording Duration (seconds)", 10, 60, 30)
 FRAME_INTERVAL = st.slider("Analysis Interval (seconds)", 2, 10, 5)
 
 SAVE_DIR = "demo_video_frames"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-# Global state
+# Global variables for emotion tracking
 emotion_counter = defaultdict(int)
 dominant_emotions = []
 timestamps = []
 confused_count = 0
 start_time = None
+recording_done = False
 
-# Use empty container to display charts later
-chart_container = st.empty()
 
-# Define RTC configuration to avoid disconnection
-RTC_CONF = RTCConfiguration({"iceServers": []})
-
+# Define the video processor class
 class EmotionProcessor(VideoProcessorBase):
     def __init__(self):
         self.last_capture_time = 0
         self.capture_count = 0
 
     def recv(self, frame):
-        global start_time, emotion_counter, dominant_emotions, timestamps, confused_count
+        global start_time, emotion_counter, dominant_emotions, timestamps, confused_count, recording_done
 
         img = frame.to_ndarray(format="bgr24")
         current_time = time.time()
@@ -47,8 +49,8 @@ class EmotionProcessor(VideoProcessorBase):
             start_time = current_time
 
         elapsed = current_time - start_time
-
         if elapsed >= RECORD_SECONDS:
+            recording_done = True
             return av.VideoFrame.from_ndarray(img, format="bgr24")
 
         if current_time - self.last_capture_time >= FRAME_INTERVAL:
@@ -83,37 +85,25 @@ class EmotionProcessor(VideoProcessorBase):
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-if st.button("Start Live Emotion Tracking"):
-    webrtc_streamer(
-        key="emotion-demo",
-        video_processor_factory=EmotionProcessor,
-        rtc_configuration=RTC_CONF,
-        media_stream_constraints={"video": True, "audio": False},
-        async_processing=True,
-    )
-    st.info("Recording in progress. Please wait until the selected duration ends.")
 
-    # Wait for recording to complete
-    while start_time is None:
-        time.sleep(0.5)
-    while time.time() - start_time < RECORD_SECONDS:
-        time.sleep(1)
+# Function to display results
+def display_results():
+    st.success("Recording completed and analyzed.")
 
-    st.success("Recording completed. Generating emotion analytics...")
-
-    # Generate Charts
+    # Pie Chart
+    st.subheader("Emotion Distribution")
     if emotion_counter:
-        st.subheader("Emotion Distribution")
         fig1, ax1 = plt.subplots()
         ax1.pie(emotion_counter.values(), labels=emotion_counter.keys(), autopct='%1.1f%%')
-        chart_container.pyplot(fig1)
+        st.pyplot(fig1)
 
+        # Bar Chart
         st.subheader("Emotion Frequency")
         fig2, ax2 = plt.subplots()
         ax2.bar(emotion_counter.keys(), emotion_counter.values(), color='skyblue')
-        chart_container.pyplot(fig2)
+        st.pyplot(fig2)
 
-        st.subheader("Emotion Trend Over Time")
+        # Trend Chart
         emotion_map = {'happy': 5, 'surprise': 4, 'neutral': 3, 'sad': 2, 'angry': 1}
         emotion_numeric = [emotion_map.get(e, 0) for e in dominant_emotions]
         fig3, ax3 = plt.subplots()
@@ -124,20 +114,46 @@ if st.button("Start Live Emotion Tracking"):
         ax3.set_ylabel("Dominant Emotion")
         ax3.set_title("Emotion Trend Over Time")
         ax3.grid(True)
-        chart_container.pyplot(fig3)
+        st.subheader("Emotion Trend")
+        st.pyplot(fig3)
 
-        st.subheader("Emotion Timeline")
-        st.dataframe({"Timestamp (s)": timestamps, "Dominant Emotion": dominant_emotions})
-
-        # Teaching suggestions
-        st.subheader("Teaching Suggestion Based on Emotion Analytics")
+        # Suggestion
+        st.subheader("Teaching Suggestions")
         if confused_count >= 2:
-            st.warning("Multiple signs of confusion detected. Try using more visuals or adjusting the pace.")
+            st.warning(f"Confusion detected {confused_count} times. Try slowing down or using visual aids.")
         if 'angry' in emotion_counter or 'fear' in emotion_counter:
-            st.error("Negative emotions like anger or fear appeared. Consider pausing and engaging with students.")
+            st.error("Negative emotions detected. Consider reducing pace or checking student feedback.")
         if 'happy' in emotion_counter and emotion_counter['happy'] >= 2:
-            st.success("Positive engagement detected. Your current teaching approach is effective!")
+            st.success("Students appear engaged. Current methods are working well.")
         if 'neutral' in emotion_counter and emotion_counter['neutral'] >= 3:
-            st.info("Many neutral responses. Consider introducing interactive elements or humor.")
+            st.info("Mainly neutral expressions. Consider interactive or humorous content.")
     else:
         st.error("No emotions were detected. Please try again.")
+
+
+# Start tracking and background thread to wait for auto-display
+if st.button("Start Live Emotion Tracking"):
+    start_time = None
+    recording_done = False
+    emotion_counter.clear()
+    dominant_emotions.clear()
+    timestamps.clear()
+    confused_count = 0
+
+    webrtc_streamer(
+        key="emotion-demo",
+        video_processor_factory=EmotionProcessor,
+        rtc_configuration=RTC_CONF,
+        media_stream_constraints={"video": True, "audio": False},
+        async_processing=True
+    )
+
+    st.info("Recording... please wait until the full duration is reached.")
+
+    def wait_and_display():
+        while not recording_done:
+            time.sleep(1)
+        time.sleep(2)
+        display_results()
+
+    threading.Thread(target=wait_and_display, daemon=True).start()
