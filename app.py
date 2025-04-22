@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 from deepface import DeepFace
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from collections import defaultdict
+from streamlit_webrtc import RTCConfiguration
 
+RTC_CONF = RTCConfiguration({"iceServers": []})
 st.set_page_config(page_title="Facial Emotion Tracker", layout="centered")
 st.title("Real-time Emotion Detection (Classroom Demo)")
 
@@ -18,6 +20,13 @@ FRAME_INTERVAL = st.slider("Analysis Interval (seconds)", 2, 10, 5)
 
 SAVE_DIR = "demo_video_frames"
 os.makedirs(SAVE_DIR, exist_ok=True)
+def reset_state():
+    global emotion_counter, dominant_emotions, timestamps, confused_count, start_time
+    emotion_counter.clear()
+    dominant_emotions.clear()
+    timestamps.clear()
+    confused_count = 0
+    start_time = None
 
 # Global state to store emotions
 emotion_counter = defaultdict(int)
@@ -78,16 +87,25 @@ class EmotionProcessor(VideoProcessorBase):
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 if st.button("Start Live Emotion Tracking"):
-    webrtc_streamer(key="emotion-demo", video_processor_factory=EmotionProcessor)
+    reset_state()  # 確保變數清空
+
+    webrtc_streamer(
+        key="emotion-demo",
+        video_processor_factory=EmotionProcessor,
+        rtc_configuration=RTC_CONF,
+        media_stream_constraints={"video": True, "audio": False},  
+        async_processing=True,
+    )
+
     st.info("Recording in progress... Please wait until it reaches selected duration.")
 
-    # Wait until recording is done
     while start_time is None:
         time.sleep(0.5)
     while time.time() - start_time < RECORD_SECONDS:
         time.sleep(1)
 
     st.success("Recording completed and analyzed.")
+
 
     # Pie Chart
     st.subheader("Emotion Distribution")
