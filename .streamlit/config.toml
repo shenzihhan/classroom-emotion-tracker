@@ -2,3 +2,6 @@
 headless = true
 enableCORS = false
 port = 8501
+
+[experimental]
+pythonVersion = "3.10"
