@@ -1,4 +1,6 @@
 streamlit==1.32.2
 opencv-python-headless==4.8.0.76
 deepface==0.0.93
+tensorflow==2.10.0
+keras==2.11.0
 matplotlib==3.8.2
