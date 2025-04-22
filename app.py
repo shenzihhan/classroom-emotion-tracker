@@ -56,7 +56,7 @@ class EmotionProcessor(VideoProcessorBase):
                     img_path=img_path,
                     actions=['emotion'],
                     enforce_detection=False,
-                    detector_backend='mtcnn'
+                    detector_backend='opencv'
                 )
                 if isinstance(results, list):
                     for res in results:
