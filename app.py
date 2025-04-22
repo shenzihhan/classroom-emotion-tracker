@@ -99,7 +99,7 @@ if st.button("Start Live Emotion Tracking"):
         media_stream_constraints={"video": True, "audio": False},  # Disable audio
         async_processing=True,
         video_html_attrs={
-            "style": {"width": "100%", "height": "auto"},  # <-- Make video fullscreen width
+            "style": {"width": "100%", "height": "100%"},  # <-- Make video fullscreen width
             "autoPlay": True,
             "muted": True,
             "playsInline": True,
