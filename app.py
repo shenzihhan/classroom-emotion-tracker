@@ -102,19 +102,19 @@ if st.button("Start Recording"):
         ax3.set_ylabel("Dominant Emotion")
         ax3.set_title("Emotion Trend Over Time")
         ax3.grid(True)
-        st.subheader("📉 Emotion Trend")
+        st.subheader("Emotion Trend")
         st.pyplot(fig3)
 
         # Suggestion for Teacher
-        st.subheader("📘 Suggestion For Teacher")
+        st.subheader("Suggestion For Teacher")
         if confused_count >= 2:
-            st.warning(f"🟠 Detected signs of confusion {confused_count} times. Try slowing down or using more visuals.")
+            st.warning(f"Detected signs of confusion {confused_count} times. Try slowing down or using more visuals.")
         if 'angry' in emotion_counter or 'fear' in emotion_counter:
-            st.error("🔴 Negative emotions detected. Consider using stress-relief or check student feedback.")
+            st.error("Negative emotions detected. Consider using stress-relief or check student feedback.")
         if 'happy' in emotion_counter and emotion_counter['happy'] >= 2:
-            st.success("🟢 Students appear engaged. Current methods are working well!")
+            st.success("Students appear engaged. Current methods are working well!")
         if 'neutral' in emotion_counter and emotion_counter['neutral'] >= 3:
-            st.info("🔵 Mostly neutral. Consider adding interaction or humor.")
+            st.info("Mostly neutral. Consider adding interaction or humor.")
 
     else:
         st.error("No emotions were detected. Please try again.")
