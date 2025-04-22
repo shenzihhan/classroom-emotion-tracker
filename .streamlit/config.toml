@@ -1,3 +1,4 @@
 [server]
-maxUploadSize = 200
-fileWatcherType = "none"
+headless = true
+enableCORS = false
+port = 8501
