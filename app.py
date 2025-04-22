@@ -10,7 +10,7 @@ from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfigurati
 from collections import defaultdict
 
 # Streamlit page config
-st.set_page_config(page_title="Facial Emotion Tracker", layout="centered")
+st.set_page_config(page_title="Facial Emotion Tracker", layout="wide")
 st.title("Real-time Emotion Detection (Classroom Demo)")
 
 # Create output directory for frames
