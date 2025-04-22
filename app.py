@@ -1,103 +1,143 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, RTCConfiguration, VideoProcessorBase
+import time
+import os
 import av
 import cv2
 import numpy as np
-import time
 import matplotlib.pyplot as plt
 from deepface import DeepFace
-from collections import Counter
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+from collections import defaultdict
 
-st.set_page_config(page_title="Real-time Emotion Detection", layout="wide")
-st.title("Real-time Emotion Detection (Classroom Demo)")
-
-# Slider for recording duration and analysis interval
-RECORD_SECONDS = st.slider("Recording Duration (seconds)", 10, 60, 30)
-FRAME_INTERVAL = st.slider("Analysis Interval (seconds)", 2, 10, 5)
-st.caption(f"Recording will automatically stop after {RECORD_SECONDS} seconds.")
-
-# Configure RTC
+# Configuration
+RECORD_SECONDS = 30
+FRAME_INTERVAL = 5
+SAVE_DIR = "demo_video_frames"
+os.makedirs(SAVE_DIR, exist_ok=True)
 RTC_CONF = RTCConfiguration({"iceServers": []})
 
-# Frame buffer and timestamp
-captured_frames = []
-start_time = None
+# Global emotion tracking state
+emotion_counter = defaultdict(int)
+dominant_emotions = []
+timestamps = []
+confused_count = 0
+recording_done = False
+
+# Streamlit setup
+st.set_page_config(page_title="Facial Emotion Tracker", layout="wide")
+st.title("Real-time Emotion Detection (Classroom Demo)")
+st.markdown(f"**Recording will automatically stop after {RECORD_SECONDS} seconds.**")
+
+# Timer display placeholder
+timer_placeholder = st.empty()
 
 class EmotionProcessor(VideoProcessorBase):
-    def __init__(self) -> None:
-        self.last_frame_time = 0
+    def __init__(self):
+        self.start_time = None
+        self.last_capture_time = 0
+        self.capture_count = 0
+        self.recording_done = False
 
-    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        global captured_frames, start_time
+    def recv(self, frame):
+        global emotion_counter, dominant_emotions, timestamps, confused_count, recording_done
+
         img = frame.to_ndarray(format="bgr24")
+        current_time = time.time()
 
-        if start_time is None:
-            start_time = time.time()
+        if self.start_time is None:
+            self.start_time = current_time
 
-        elapsed = time.time() - start_time
-        if elapsed <= RECORD_SECONDS and elapsed - self.last_frame_time >= FRAME_INTERVAL:
-            captured_frames.append(img.copy())
-            self.last_frame_time = elapsed
+        elapsed = current_time - self.start_time
+        remaining = max(0, int(RECORD_SECONDS - elapsed))
+        timer_placeholder.markdown(f"### Time Remaining: {remaining} seconds")
+
+        if elapsed >= RECORD_SECONDS:
+            recording_done = True
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+        if current_time - self.last_capture_time >= FRAME_INTERVAL:
+            timestamp_sec = int(elapsed)
+            img_path = os.path.join(SAVE_DIR, f"frame_{timestamp_sec}.jpg")
+            cv2.imwrite(img_path, img)
+            self.capture_count += 1
+
+            try:
+                results = DeepFace.analyze(
+                    img_path=img_path,
+                    actions=['emotion'],
+                    enforce_detection=False,
+                    detector_backend='opencv'
+                )
+                if isinstance(results, list):
+                    for res in results:
+                        emotions = res['emotion']
+                        dominant = res['dominant_emotion']
+                        dominant_emotions.append(dominant)
+                        timestamps.append(timestamp_sec)
+                        emotion_counter[dominant] += 1
+
+                        if emotions.get('surprise', 0) > 30 and emotions.get('neutral', 0) > 30:
+                            confused_count += 1
+                        elif emotions.get('sad', 0) > 20 and emotions.get('fear', 0) > 20:
+                            confused_count += 1
+            except Exception as e:
+                st.warning(f"Emotion analysis failed at {timestamp_sec}s: {e}")
+
+            self.last_capture_time = current_time
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# Start detection
-if st.button("Start Live Emotion Tracking"):
-    webrtc_ctx = webrtc_streamer(
-        key="emotion-demo",
-        video_processor_factory=EmotionProcessor,
-        rtc_configuration=RTC_CONF,
-        media_stream_constraints={"video": True, "audio": False},
-        async_processing=True,
-    )
+# Start the camera and process
+webrtc_ctx = webrtc_streamer(
+    key="emotion-demo",
+    video_processor_factory=EmotionProcessor,
+    rtc_configuration=RTC_CONF,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
+)
 
-    # Countdown display
-    status_text = st.empty()
-    start_time = None
-
-    while webrtc_ctx.state.playing:
-        if start_time is None:
-            start_time = time.time()
-        elapsed = time.time() - start_time
-        if elapsed >= RECORD_SECONDS:
-            break
-        status_text.info(f"Recording... {int(RECORD_SECONDS - elapsed)} seconds remaining")
+# Wait for recording to complete then analyze
+if webrtc_ctx.video_processor:
+    while not recording_done:
         time.sleep(1)
 
-    # Process results
-    if captured_frames:
-        status_text.success("Recording complete. Analyzing...")
+    timer_placeholder.markdown("### Recording complete.")
+    st.subheader("Emotion Distribution")
+    if emotion_counter:
+        # Pie Chart
+        fig1, ax1 = plt.subplots()
+        ax1.pie(emotion_counter.values(), labels=emotion_counter.keys(), autopct='%1.1f%%')
+        st.pyplot(fig1)
 
-        emotion_counts = []
-        for frame in captured_frames:
-            try:
-                result = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False)
-                if isinstance(result, list):
-                    result = result[0]
-                dominant_emotion = result['dominant_emotion']
-                emotion_counts.append(dominant_emotion)
-            except Exception as e:
-                print(f"Emotion detection error: {e}")
+        # Bar Chart
+        st.subheader("Emotion Frequency")
+        fig2, ax2 = plt.subplots()
+        ax2.bar(emotion_counter.keys(), emotion_counter.values(), color='skyblue')
+        st.pyplot(fig2)
 
-        emotion_freq = Counter(emotion_counts)
+        # Trend Chart
+        st.subheader("Emotion Trend")
+        emotion_map = {'happy': 5, 'surprise': 4, 'neutral': 3, 'sad': 2, 'angry': 1}
+        emotion_numeric = [emotion_map.get(e, 0) for e in dominant_emotions]
+        fig3, ax3 = plt.subplots()
+        ax3.plot(timestamps, emotion_numeric, marker='o')
+        ax3.set_yticks(list(emotion_map.values()))
+        ax3.set_yticklabels(list(emotion_map.keys()))
+        ax3.set_xlabel("Time (sec)")
+        ax3.set_ylabel("Dominant Emotion")
+        ax3.set_title("Emotion Trend Over Time")
+        ax3.grid(True)
+        st.pyplot(fig3)
 
-        # Show result as bar chart
-        fig, ax = plt.subplots()
-        ax.bar(emotion_freq.keys(), emotion_freq.values(), color='coral')
-        ax.set_title("Detected Emotion Distribution")
-        ax.set_ylabel("Frequency")
-        st.pyplot(fig)
-
-        # Teaching recommendation
-        most_common = emotion_freq.most_common(1)
-        if most_common:
-            emo, freq = most_common[0]
-            st.markdown(f"### Suggested Action for Instructors:")
-            if emo in ["sad", "fear", "angry"]:
-                st.info(f"Many students appeared **{emo}**. Consider slowing down or engaging with the class through a discussion or interactive activity.")
-            elif emo == "happy":
-                st.success("Great engagement! Keep up the positive energy.")
-            else:
-                st.info(f"Dominant emotion: **{emo}**. Consider checking in with students if needed.")
+        # Teacher Suggestion
+        st.subheader("Suggestion for Teacher")
+        if confused_count >= 2:
+            st.warning("Detected signs of confusion multiple times. Try slowing down or using visuals.")
+        if 'angry' in emotion_counter or 'fear' in emotion_counter:
+            st.error("Negative emotions detected. Consider reducing pressure or asking for feedback.")
+        if 'happy' in emotion_counter and emotion_counter['happy'] >= 2:
+            st.success("Students appear engaged. Current methods are effective.")
+        if 'neutral' in emotion_counter and emotion_counter['neutral'] >= 3:
+            st.info("Mostly neutral. Consider adding interaction or humor.")
     else:
-        st.warning("No frames captured. Please ensure your camera is active and try again.")
+        st.error("No emotions were detected. Please try again.")
