@@ -13,11 +13,13 @@ This Streamlit web application uses **DeepFace**, **OpenCV**, and **Streamlit We
 ### 1. **Prepare your repository structure:**
 
 ```bash
+├── .devcontainer/
+│   └── devcontainer.json
+├── .streamlit/
+│   └── config.toml       
+├── README.md
 ├── app.py
 ├── requirements.txt
-├── .devcontainer/
-│   └── devcontainer.json (optional)
-├── README.md
 ```
 
 ### 2. **Main file path setting in Streamlit Cloud:**
