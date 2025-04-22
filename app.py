@@ -7,9 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1bHBmmco6kkZXvGj42nFUBpq4i7bC_HgR
 """
 
-!pip install deepface
-
-!pip install streamlit
 
 import streamlit as st
 import cv2
