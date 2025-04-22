@@ -49,9 +49,8 @@ class EmotionProcessor(VideoProcessorBase):
             start_time = current_time
 
         elapsed = current_time - start_time
-        if elapsed >= RECORD_SECONDS:
-            recording_done = True
-            return av.VideoFrame.from_ndarray(img, format="bgr24")
+        if recording_done:
+            return 
 
         if current_time - self.last_capture_time >= FRAME_INTERVAL:
             timestamp_sec = int(elapsed)
