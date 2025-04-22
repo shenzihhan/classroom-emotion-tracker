@@ -1,4 +1,3 @@
-# classroom-emotion-tracker
 # Facial Emotion Tracker (Classroom Demo)
 
 This Streamlit web application uses **DeepFace**, **OpenCV**, and **Streamlit WebRTC** to analyze student emotions in real-time using the webcam. It is designed for educational use cases such as classroom engagement tracking.
