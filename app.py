@@ -92,21 +92,23 @@ class EmotionProcessor(VideoProcessorBase):
 
 # UI and trigger logic
 if st.button("Start Live Emotion Tracking"):
-    reset_state()
-
-    webrtc_ctx = webrtc_streamer(
+    webrtc_streamer(
         key="emotion-demo",
         video_processor_factory=EmotionProcessor,
         rtc_configuration=RTC_CONF,
-        media_stream_constraints={"video": True, "audio": False},
+        media_stream_constraints={"video": True, "audio": False},  # Disable audio
         async_processing=True,
+        video_html_attrs={
+            "style": {"width": "100%", "height": "auto"},  # <-- Make video fullscreen width
+            "autoPlay": True,
+            "muted": True,
+            "playsInline": True,
+        },
     )
+    st.info("Recording in progress... Please wait until it reaches selected duration.")
 
-    st.info("Recording in progress. Please wait until it finishes.")
-
-    # Wait for recording and emotion analysis to complete
-    while not webrtc_ctx.state.playing:
-        time.sleep(0.2)
+    while start_time is None:
+        time.sleep(0.5)
     while time.time() - start_time < RECORD_SECONDS:
         time.sleep(1)
 
