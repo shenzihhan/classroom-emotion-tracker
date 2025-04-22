@@ -4,5 +4,5 @@ opencv-python-headless==4.8.0.76
 deepface==0.0.93
 tensorflow==2.11.0
 keras==2.11.0
-mtcnn==0.1.0
 matplotlib==3.8.2
+mtcnn==0.1.0
