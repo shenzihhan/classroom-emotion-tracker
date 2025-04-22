@@ -9,20 +9,15 @@ from deepface import DeepFace
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 from collections import defaultdict
 
-# Streamlit page config
-st.set_page_config(page_title="Facial Emotion Tracker", layout="wide")
+st.set_page_config(page_title="Real-time Emotion Tracker", layout="wide")
 st.title("Real-time Emotion Detection (Classroom Demo)")
 
-# Create output directory for frames
-SAVE_DIR = "demo_video_frames"
-os.makedirs(SAVE_DIR, exist_ok=True)
-
-# User-defined recording settings
+# Parameters
 RECORD_SECONDS = st.slider("Recording Duration (seconds)", 10, 60, 30)
 FRAME_INTERVAL = st.slider("Analysis Interval (seconds)", 2, 10, 5)
 
-# WebRTC configuration with no external STUN servers
-RTC_CONF = RTCConfiguration({"iceServers": []})
+SAVE_DIR = "demo_video_frames"
+os.makedirs(SAVE_DIR, exist_ok=True)
 
 # Global state
 emotion_counter = defaultdict(int)
@@ -31,15 +26,12 @@ timestamps = []
 confused_count = 0
 start_time = None
 
-def reset_state():
-    global emotion_counter, dominant_emotions, timestamps, confused_count, start_time
-    emotion_counter = defaultdict(int)
-    dominant_emotions.clear()
-    timestamps.clear()
-    confused_count = 0
-    start_time = None
+# Use empty container to display charts later
+chart_container = st.empty()
 
-# Video processor for real-time emotion detection
+# Define RTC configuration to avoid disconnection
+RTC_CONF = RTCConfiguration({"iceServers": []})
+
 class EmotionProcessor(VideoProcessorBase):
     def __init__(self):
         self.last_capture_time = 0
@@ -55,6 +47,7 @@ class EmotionProcessor(VideoProcessorBase):
             start_time = current_time
 
         elapsed = current_time - start_time
+
         if elapsed >= RECORD_SECONDS:
             return av.VideoFrame.from_ndarray(img, format="bgr24")
 
@@ -90,43 +83,37 @@ class EmotionProcessor(VideoProcessorBase):
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# UI and trigger logic
 if st.button("Start Live Emotion Tracking"):
     webrtc_streamer(
         key="emotion-demo",
         video_processor_factory=EmotionProcessor,
         rtc_configuration=RTC_CONF,
-        media_stream_constraints={"video": True, "audio": False},  # Disable audio
+        media_stream_constraints={"video": True, "audio": False},
         async_processing=True,
-        video_html_attrs={
-            "style": {"width": "100%", "height": "100%"},  # <-- Make video fullscreen width
-            "autoPlay": True,
-            "muted": True,
-            "playsInline": True,
-        },
     )
-    st.info("Recording in progress... Please wait until it reaches selected duration.")
+    st.info("Recording in progress. Please wait until the selected duration ends.")
 
+    # Wait for recording to complete
     while start_time is None:
         time.sleep(0.5)
     while time.time() - start_time < RECORD_SECONDS:
         time.sleep(1)
 
-    st.success("Recording completed and analyzed.")
+    st.success("Recording completed. Generating emotion analytics...")
 
-    # Display charts
-    st.subheader("Emotion Distribution")
+    # Generate Charts
     if emotion_counter:
+        st.subheader("Emotion Distribution")
         fig1, ax1 = plt.subplots()
         ax1.pie(emotion_counter.values(), labels=emotion_counter.keys(), autopct='%1.1f%%')
-        st.pyplot(fig1)
+        chart_container.pyplot(fig1)
 
         st.subheader("Emotion Frequency")
         fig2, ax2 = plt.subplots()
         ax2.bar(emotion_counter.keys(), emotion_counter.values(), color='skyblue')
-        st.pyplot(fig2)
+        chart_container.pyplot(fig2)
 
-        st.subheader("Emotion Trend")
+        st.subheader("Emotion Trend Over Time")
         emotion_map = {'happy': 5, 'surprise': 4, 'neutral': 3, 'sad': 2, 'angry': 1}
         emotion_numeric = [emotion_map.get(e, 0) for e in dominant_emotions]
         fig3, ax3 = plt.subplots()
@@ -135,17 +122,22 @@ if st.button("Start Live Emotion Tracking"):
         ax3.set_yticklabels(list(emotion_map.keys()))
         ax3.set_xlabel("Time (sec)")
         ax3.set_ylabel("Dominant Emotion")
+        ax3.set_title("Emotion Trend Over Time")
         ax3.grid(True)
-        st.pyplot(fig3)
+        chart_container.pyplot(fig3)
 
-        st.subheader("Suggestion For Teacher")
+        st.subheader("Emotion Timeline")
+        st.dataframe({"Timestamp (s)": timestamps, "Dominant Emotion": dominant_emotions})
+
+        # Teaching suggestions
+        st.subheader("Teaching Suggestion Based on Emotion Analytics")
         if confused_count >= 2:
-            st.warning(f"Signs of confusion detected {confused_count} times. Try slowing down or adding visuals.")
+            st.warning("Multiple signs of confusion detected. Try using more visuals or adjusting the pace.")
         if 'angry' in emotion_counter or 'fear' in emotion_counter:
-            st.error("Negative emotions detected. Consider stress relief or gathering student feedback.")
+            st.error("Negative emotions like anger or fear appeared. Consider pausing and engaging with students.")
         if 'happy' in emotion_counter and emotion_counter['happy'] >= 2:
-            st.success("Students appear engaged. Keep up the current method.")
+            st.success("Positive engagement detected. Your current teaching approach is effective!")
         if 'neutral' in emotion_counter and emotion_counter['neutral'] >= 3:
-            st.info("Mostly neutral. Consider adding interaction or humor.")
+            st.info("Many neutral responses. Consider introducing interactive elements or humor.")
     else:
         st.error("No emotions were detected. Please try again.")
